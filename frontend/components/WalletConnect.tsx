@@ -13,22 +13,25 @@ export default function WalletConnect() {
     setLoading(true);
     setError(null);
     try {
-      const { isConnected, getAddress, isAllowed, setAllowed } = await import(
-        "@stellar/freighter-api"
-      );
+      const freighter = await import("@stellar/freighter-api");
 
-      const connected = await isConnected();
-      if (!connected) {
+      const { isConnected } = await freighter.isConnected();
+      if (!isConnected) {
         setError("Freighter not detected. Install the extension first.");
         return;
       }
 
-      const allowed = await isAllowed();
-      if (!allowed) {
-        await setAllowed();
+      const { isAllowed } = await freighter.isAllowed();
+      if (!isAllowed) {
+        await freighter.setAllowed();
       }
 
-      const { address } = await getAddress();
+      const { address, error } = await freighter.getAddress();
+      if (error) {
+        setError("Could not get wallet address. Please try again.");
+        return;
+      }
+
       setWallet({ address, connected: true, network: "testnet" });
     } catch (e) {
       setError("Failed to connect wallet.");

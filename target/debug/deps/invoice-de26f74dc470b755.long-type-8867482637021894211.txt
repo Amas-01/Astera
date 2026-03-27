@@ -1,0 +1,3 @@
+soroban_sdk::xdr::ScVal
+&core::option::Option<DisputeResolution>
+soroban_sdk::xdr::ScVal: TryFrom<&core::option::Option<DisputeResolution>>

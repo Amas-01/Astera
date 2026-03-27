@@ -1,4 +1,14 @@
-export type InvoiceStatus = 'Pending' | 'Funded' | 'Paid' | 'Defaulted';
+export type InvoiceStatus = 'Pending' | 'Funded' | 'Paid' | 'Defaulted' | 'Disputed';
+
+export type DisputeResolution = 'Upheld' | 'Rejected';
+
+export interface DisputeRecord {
+  reason: string;
+  disputedAtLedger: number;
+  disputedAtTimestamp: number;
+  resolution?: DisputeResolution;
+  resolvedAtLedger?: number;
+}
 
 export interface Invoice {
   id: number;
@@ -11,6 +21,7 @@ export interface Invoice {
   createdAt: number;
   fundedAt: number;
   paidAt: number;
+  defaultedAt: number;
   poolContract: string;
 }
 

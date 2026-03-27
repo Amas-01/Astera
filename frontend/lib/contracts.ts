@@ -10,7 +10,14 @@ import {
   Address,
 } from './stellar';
 import { TransactionBuilder, BASE_FEE, Contract, rpc as StellarRpc } from '@stellar/stellar-sdk';
-import type { Invoice, InvestorPosition, PoolConfig, FundedInvoice } from './types';
+import type {
+  Invoice,
+  InvestorPosition,
+  PoolConfig,
+  FundedInvoice,
+  DisputeRecord,
+  DisputeResolution,
+} from './types';
 
 // ---- Invoice Contract ----
 
@@ -25,6 +32,22 @@ export async function getInvoice(id: number): Promise<Invoice> {
 
   const result = (sim as StellarRpc.Api.SimulateTransactionSuccessResponse).result;
   return scValToNative(result!.retval) as Invoice;
+}
+
+export async function getDisputeRecord(id: number): Promise<DisputeRecord | null> {
+  const sim = await simulateTx(
+    INVOICE_CONTRACT_ID,
+    'get_dispute_record',
+    [nativeToScVal(id, { type: 'u64' })],
+    'GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN',
+  );
+
+  const result = (sim as StellarRpc.Api.SimulateTransactionSuccessResponse).result;
+  const raw = scValToNative(result!.retval);
+  if (!raw) return null;
+
+  // scValToNative results for structs are objects with keys
+  return raw as DisputeRecord;
 }
 
 export async function getInvoiceCount(): Promise<number> {
@@ -312,6 +335,68 @@ export async function buildMarkDefaultedTx(admin: string, invoiceId: number): Pr
         'mark_defaulted',
         nativeToScVal(invoiceId, { type: 'u64' }),
         new Address(POOL_CONTRACT_ID).toScVal(), // Attempting with Pool contract ID
+      ),
+    )
+    .setTimeout(30)
+    .build();
+
+  const sim = await rpc.simulateTransaction(tx);
+  if (StellarRpc.Api.isSimulationError(sim)) {
+    throw new Error(`Simulation failed: ${sim.error}`);
+  }
+
+  const prepared = StellarRpc.assembleTransaction(tx, sim).build();
+  return prepared.toXDR();
+}
+
+export async function buildDisputeInvoiceTx(params: {
+  owner: string;
+  invoiceId: number;
+  reason: string;
+}): Promise<string> {
+  const account = await rpc.getAccount(params.owner);
+  const contract = new Contract(INVOICE_CONTRACT_ID);
+
+  const tx = new TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase: NETWORK,
+  })
+    .addOperation(
+      contract.call(
+        'dispute_invoice',
+        nativeToScVal(params.invoiceId, { type: 'u64' }),
+        nativeToScVal(params.reason, { type: 'string' }),
+      ),
+    )
+    .setTimeout(30)
+    .build();
+
+  const sim = await rpc.simulateTransaction(tx);
+  if (StellarRpc.Api.isSimulationError(sim)) {
+    throw new Error(`Simulation failed: ${sim.error}`);
+  }
+
+  const prepared = StellarRpc.assembleTransaction(tx, sim).build();
+  return prepared.toXDR();
+}
+
+export async function buildResolveDisputeTx(params: {
+  admin: string;
+  invoiceId: number;
+  resolution: DisputeResolution;
+}): Promise<string> {
+  const account = await rpc.getAccount(params.admin);
+  const contract = new Contract(INVOICE_CONTRACT_ID);
+
+  const tx = new TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase: NETWORK,
+  })
+    .addOperation(
+      contract.call(
+        'resolve_dispute',
+        nativeToScVal(params.invoiceId, { type: 'u64' }),
+        nativeToScVal(params.resolution),
       ),
     )
     .setTimeout(30)

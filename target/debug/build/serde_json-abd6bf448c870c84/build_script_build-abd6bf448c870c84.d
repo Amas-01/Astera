@@ -1,0 +1,5 @@
+/home/stealth_dev/Documents/PROJECTS/DRIPS PROJECT/task 18-astera/Astera/target/debug/build/serde_json-abd6bf448c870c84/build_script_build-abd6bf448c870c84.d: /home/stealth_dev/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.149/build.rs
+
+/home/stealth_dev/Documents/PROJECTS/DRIPS PROJECT/task 18-astera/Astera/target/debug/build/serde_json-abd6bf448c870c84/build_script_build-abd6bf448c870c84: /home/stealth_dev/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.149/build.rs
+
+/home/stealth_dev/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.149/build.rs:

@@ -1,108 +1,93 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   getInvoice,
+  getInvoiceMetadata,
   getDisputeRecord,
   buildDisputeInvoiceTx,
   buildResolveDisputeTx,
   submitTx,
 } from '@/lib/contracts';
-import { formatUSDC, formatDate, daysUntil, truncateAddress } from '@/lib/stellar';
-import type { Invoice, DisputeRecord, DisputeResolution } from '@/lib/types';
+import { formatUSDC, formatDate, daysUntil } from '@/lib/stellar';
+import type { Invoice, InvoiceMetadata, DisputeRecord, DisputeResolution } from '@/lib/types';
 import { useStore } from '@/lib/store';
 
 export default function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { wallet } = useStore();
   const [invoice, setInvoice] = useState<Invoice | null>(null);
-  const [dispute, setDispute] = useState<DisputeRecord | null>(null);
+  const [metadata, setMetadata] = useState<InvoiceMetadata | null>(null);
+  const [disputeRecord, setDisputeRecord] = useState<DisputeRecord | null>(null);
   const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Dispute Modal State
   const [showDisputeModal, setShowDisputeModal] = useState(false);
   const [disputeReason, setDisputeReason] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    loadInvoice();
-  }, [id]);
-
-  async function loadInvoice() {
+  const loadInvoice = useCallback(async () => {
+    setLoading(true);
     try {
-      const inv = await getInvoice(parseInt(id));
+      const numId = parseInt(id, 10);
+      const [inv, meta, dispute] = await Promise.all([
+        getInvoice(numId),
+        getInvoiceMetadata(numId),
+        getDisputeRecord(numId),
+      ]);
       setInvoice(inv);
-      const record = await getDisputeRecord(parseInt(id));
-      setDispute(record);
+      setMetadata(meta);
+      setDisputeRecord(dispute);
     } catch (e) {
       setError('Invoice not found or contracts not deployed.');
       console.error(e);
     } finally {
       setLoading(false);
     }
-  }
+  }, [id]);
+
+  useEffect(() => {
+    loadInvoice();
+  }, [loadInvoice]);
 
   async function handleDispute() {
-    if (!wallet.address || !invoice) return;
-    if (disputeReason.trim().length === 0) {
-      alert('Please enter a reason for the dispute.');
-      return;
-    }
-
-    setActionLoading(true);
+    if (!disputeReason.trim()) return;
+    setSubmitting(true);
     try {
       const xdr = await buildDisputeInvoiceTx({
-        owner: wallet.address,
-        invoiceId: invoice.id,
+        owner: wallet.address!,
+        invoiceId: invoice!.id,
         reason: disputeReason,
       });
-
-      const freighter = await import('@stellar/freighter-api');
-      const { signedTxXdr, error: signError } = await freighter.signTransaction(xdr, {
-        networkPassphrase: 'Test SDF Network ; September 2015',
-        address: wallet.address,
-      });
-
-      if (signError) throw new Error(signError.message || 'Signing rejected.');
-
-      await submitTx(signedTxXdr);
+      await submitTx(xdr);
       setShowDisputeModal(false);
       await loadInvoice();
     } catch (e) {
       console.error(e);
       alert('Failed to file dispute.');
     } finally {
-      setActionLoading(false);
+      setSubmitting(false);
     }
   }
 
   async function handleResolve(resolution: DisputeResolution) {
-    if (!wallet.address || !invoice) return;
-
-    setActionLoading(true);
+    setSubmitting(true);
     try {
       const xdr = await buildResolveDisputeTx({
-        admin: wallet.address,
-        invoiceId: invoice.id,
+        admin: wallet.address!,
+        invoiceId: invoice!.id,
         resolution,
       });
-
-      const freighter = await import('@stellar/freighter-api');
-      const { signedTxXdr, error: signError } = await freighter.signTransaction(xdr, {
-        networkPassphrase: 'Test SDF Network ; September 2015',
-        address: wallet.address,
-      });
-
-      if (signError) throw new Error(signError.message || 'Signing rejected.');
-
-      await submitTx(signedTxXdr);
+      await submitTx(xdr);
       await loadInvoice();
     } catch (e) {
       console.error(e);
       alert('Failed to resolve dispute.');
     } finally {
-      setActionLoading(false);
+      setSubmitting(false);
     }
   }
 
@@ -118,7 +103,7 @@ export default function InvoiceDetailPage() {
     );
   }
 
-  if (error || !invoice) {
+  if (error || !invoice || !metadata) {
     return (
       <div className="min-h-screen pt-24 px-6 flex flex-col items-center justify-center text-center">
         <p className="text-red-400 mb-4">{error ?? 'Invoice not found.'}</p>
@@ -129,38 +114,35 @@ export default function InvoiceDetailPage() {
     );
   }
 
-  const days = daysUntil(invoice.dueDate);
+  const days = daysUntil(metadata.dueDate);
   const isOwner = wallet.address === invoice.owner;
+  const isAdmin = wallet.address === 'GBAdmin...'; // Simplified or from store
 
   const timeline = [
     { label: 'Created', ts: invoice.createdAt, done: true },
-    { label: 'Funded', ts: invoice.fundedAt, done: invoice.status !== 'Pending' },
+    { label: 'Funded', ts: invoice.fundedAt, done: metadata.status !== 'Pending' },
+    { label: 'Paid', ts: invoice.paidAt, done: metadata.status === 'Paid' },
   ];
 
-  if (
-    invoice.status === 'Defaulted' ||
-    invoice.status === 'Disputed' ||
-    (invoice.status === 'Funded' && invoice.defaultedAt > 0)
-  ) {
-    timeline.push({ label: 'Defaulted', ts: invoice.defaultedAt, done: true });
-  }
-
-  if (dispute) {
+  if (metadata.status === 'Disputed' || disputeRecord) {
     timeline.push({
-      label: `Dispute Filed: ${dispute.reason}`,
-      ts: dispute.disputedAtTimestamp,
+      label: 'Disputed',
+      ts: disputeRecord?.filedAt || 0,
       done: true,
     });
-    if (dispute.resolution === 'Upheld') {
-      timeline.push({ label: 'Dispute Upheld', ts: 0, done: true });
-    } else if (dispute.resolution === 'Rejected') {
-      timeline.push({ label: 'Dispute Rejected', ts: 0, done: true });
+    if (disputeRecord?.resolvedAt) {
+      timeline.push({
+        label: `Dispute ${disputeRecord.resolution}`,
+        ts: disputeRecord.resolvedAt,
+        done: true,
+      });
     }
   }
 
-  if (invoice.status === 'Paid') {
-    timeline.push({ label: 'Paid', ts: invoice.paidAt, done: true });
-  }
+  const isDisputeWindowOpen =
+    metadata.status === 'Defaulted' &&
+    invoice.defaultedAt > 0 &&
+    Math.floor(Date.now() / 1000) < invoice.defaultedAt + 604800;
 
   return (
     <div className="min-h-screen pt-24 pb-16 px-6">
@@ -175,24 +157,33 @@ export default function InvoiceDetailPage() {
 
         {/* Header */}
         <div className="p-6 bg-brand-card border border-brand-border rounded-2xl mb-6">
-          <div className="flex items-start justify-between mb-6">
-            <div>
-              <p className="text-xs text-brand-muted mb-1">Invoice #{invoice.id}</p>
-              <h1 className="text-2xl font-bold">{invoice.debtor}</h1>
+          {metadata.image ? (
+            <div className="mb-6 rounded-xl overflow-hidden border border-brand-border bg-brand-dark">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={metadata.image} alt="" className="w-full h-40 object-cover" />
+            </div>
+          ) : null}
+          <div className="flex items-start justify-between mb-6 gap-4">
+            <div className="min-w-0">
+              <p className="text-xs text-brand-muted mb-1">
+                {metadata.symbol} · Invoice #{invoice.id}
+              </p>
+              <h1 className="text-2xl font-bold">{metadata.name}</h1>
+              <p className="text-brand-muted mt-1">{metadata.debtor}</p>
             </div>
             <span
-              className={`text-sm font-medium px-3 py-1.5 rounded-full badge-${invoice.status.toLowerCase()}`}
+              className={`text-sm font-medium px-3 py-1.5 rounded-full flex-shrink-0 badge-${metadata.status.toLowerCase()}`}
             >
-              {invoice.status}
+              {metadata.status}
             </span>
           </div>
 
-          <div className="text-4xl font-bold gradient-text mb-6">{formatUSDC(invoice.amount)}</div>
+          <div className="text-4xl font-bold gradient-text mb-6">{formatUSDC(metadata.amount)}</div>
 
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <p className="text-brand-muted mb-1">Due Date</p>
-              <p className="font-medium">{formatDate(invoice.dueDate)}</p>
+              <p className="font-medium">{formatDate(metadata.dueDate)}</p>
             </div>
             <div>
               <p className="text-brand-muted mb-1">Time Remaining</p>
@@ -208,14 +199,42 @@ export default function InvoiceDetailPage() {
               <p className="text-brand-muted mb-1">Owner</p>
               <p className="font-mono text-xs text-white break-all">{invoice.owner}</p>
             </div>
-            {invoice.description && (
+            {metadata.description && (
               <div className="col-span-2">
                 <p className="text-brand-muted mb-1">Description</p>
-                <p className="text-sm">{invoice.description}</p>
+                <p className="text-sm">{metadata.description}</p>
               </div>
             )}
           </div>
         </div>
+
+        {/* Dispute Details if any */}
+        {disputeRecord && (
+          <div className="p-6 bg-red-500/10 border border-red-500/20 rounded-2xl mb-6">
+            <h3 className="text-red-400 font-semibold mb-2">Dispute Filed</h3>
+            <p className="text-sm text-brand-muted mb-4 italic">
+              &quot;{disputeRecord.reason}&quot;
+            </p>
+            {metadata.status === 'Disputed' && isAdmin && (
+              <div className="flex gap-3">
+                <button
+                  onClick={() => handleResolve('Upheld')}
+                  disabled={submitting}
+                  className="bg-brand-gold text-brand-dark px-4 py-2 rounded-lg text-sm font-bold hover:bg-white transition-colors"
+                >
+                  Uphold Dispute
+                </button>
+                <button
+                  onClick={() => handleResolve('Rejected')}
+                  disabled={submitting}
+                  className="border border-brand-border px-4 py-2 rounded-lg text-sm font-bold hover:bg-brand-border transition-colors text-white"
+                >
+                  Reject Dispute
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Timeline */}
         <div className="p-6 bg-brand-card border border-brand-border rounded-2xl mb-6">
@@ -244,98 +263,58 @@ export default function InvoiceDetailPage() {
         </div>
 
         {/* Actions */}
-        {isOwner && invoice.status === 'Pending' && (
+        {isOwner && isDisputeWindowOpen && (
+          <button
+            onClick={() => setShowDisputeModal(true)}
+            className="w-full py-4 bg-brand-dark border border-red-500/50 text-red-500 rounded-2xl font-bold hover:bg-red-500/10 transition-colors mb-6"
+          >
+            File Dispute
+          </button>
+        )}
+
+        {isOwner && metadata.status === 'Pending' && (
           <div className="p-4 bg-brand-gold/10 border border-brand-gold/20 rounded-xl text-sm text-brand-muted">
             Your invoice is pending review. Once approved, the pool will fund it and USDC will be
             sent to your wallet.
           </div>
         )}
+      </div>
 
-        {isOwner &&
-          invoice.status === 'Defaulted' &&
-          days < 0 &&
-          Math.abs(days) <= 7 &&
-          !dispute && (
-            <div className="p-6 bg-brand-card border border-brand-border rounded-2xl flex flex-col gap-4">
-              <h3 className="text-lg font-bold text-red-400">Default Notice</h3>
-              <p className="text-sm text-brand-muted">
-                This invoice has been marked as defaulted. If you believe this is an error or have
-                valid proof of repayment, you can file a dispute within 7 days of the default event.
-              </p>
+      {/* Dispute Modal */}
+      {showDisputeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-brand-dark/80 backdrop-blur-sm">
+          <div className="bg-brand-card border border-brand-border rounded-3xl p-8 max-w-lg w-full">
+            <h2 className="text-2xl font-bold mb-2">File Dispute</h2>
+            <p className="text-brand-muted text-sm mb-6">
+              Explain why this default is incorrect (e.g., payment was sent off-chain).
+            </p>
+
+            <textarea
+              value={disputeReason}
+              onChange={(e) => setDisputeReason(e.target.value)}
+              placeholder="Enter dispute reason..."
+              className="w-full h-32 bg-brand-dark border border-brand-border rounded-xl p-4 text-white focus:outline-none focus:border-brand-gold transition-colors mb-6"
+            />
+
+            <div className="flex gap-4">
               <button
-                onClick={() => setShowDisputeModal(true)}
-                className="w-full py-3 bg-red-900/30 text-red-500 border border-red-800/30 font-bold rounded-xl hover:bg-red-900/50 transition-all"
+                onClick={() => setShowDisputeModal(false)}
+                className="flex-1 py-3 border border-brand-border rounded-xl font-bold hover:bg-brand-border transition-colors"
+                disabled={submitting}
               >
-                File Dispute
+                Cancel
+              </button>
+              <button
+                onClick={handleDispute}
+                disabled={submitting || !disputeReason.trim()}
+                className="flex-1 py-3 bg-brand-gold text-brand-dark rounded-xl font-bold hover:bg-white transition-colors disabled:opacity-50"
+              >
+                {submitting ? 'Submitting...' : 'Submit Dispute'}
               </button>
             </div>
-          )}
-
-        {invoice.status === 'Disputed' && (
-          <div className="p-6 bg-brand-card border border-brand-border rounded-2xl flex flex-col gap-4">
-            <h3 className="text-lg font-bold text-yellow-400">Dispute Pending</h3>
-            <p className="text-sm text-brand-muted">
-              A dispute has been filed and is currently under review by the protocol administrators.
-            </p>
-            {/* Admin Resolution Section — assuming admin address is known or matches config */}
-            {/* In a real app we might fetch the config.admin to compare */}
-            {wallet.address && (
-              <div className="grid grid-cols-2 gap-4 mt-2">
-                <button
-                  onClick={() => handleResolve('Upheld')}
-                  disabled={actionLoading}
-                  className="py-3 bg-green-900/30 text-green-500 border border-green-800/30 font-bold rounded-xl hover:bg-green-900/50 transition-all disabled:opacity-50"
-                  id="uphold-dispute-btn"
-                >
-                  Uphold Dispute
-                </button>
-                <button
-                  onClick={() => handleResolve('Rejected')}
-                  disabled={actionLoading}
-                  className="py-3 bg-red-900/30 text-red-500 border border-red-800/30 font-bold rounded-xl hover:bg-red-900/50 transition-all disabled:opacity-50"
-                  id="reject-dispute-btn"
-                >
-                  Reject Dispute
-                </button>
-              </div>
-            )}
           </div>
-        )}
-
-        {/* Dispute Modal */}
-        {showDisputeModal && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-6">
-            <div className="bg-brand-dark border border-brand-border rounded-3xl w-full max-w-md p-8 shadow-2xl animate-in zoom-in-95 duration-200">
-              <h2 className="text-2xl font-bold mb-2">File Dispute</h2>
-              <p className="text-brand-muted text-sm mb-6">
-                Please provide a reason or evidence link for your dispute. This will be stored
-                permanently on-chain.
-              </p>
-              <textarea
-                value={disputeReason}
-                onChange={(e) => setDisputeReason(e.target.value)}
-                placeholder="e.g. Transaction hash of off-chain repayment..."
-                className="w-full h-32 bg-brand-card border border-brand-border rounded-xl p-4 text-white placeholder:text-brand-muted focus:outline-none focus:ring-2 focus:ring-brand-gold/50 mb-6 resize-none"
-              />
-              <div className="flex gap-4">
-                <button
-                  onClick={() => setShowDisputeModal(false)}
-                  className="flex-1 py-3 bg-brand-border text-white font-bold rounded-xl hover:bg-white/10 transition-all"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleDispute}
-                  disabled={actionLoading || disputeReason.trim().length === 0}
-                  className="flex-1 py-3 bg-brand-gold text-brand-dark font-bold rounded-xl hover:shadow-[0_0_20px_rgba(255,191,0,0.4)] transition-all disabled:opacity-50"
-                >
-                  {actionLoading ? 'Filing...' : 'Submit'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -23,7 +23,9 @@ type EventKind =
   | 'pool_deposit'
   | 'pool_funded'
   | 'pool_repaid'
-  | 'pool_withdraw';
+  | 'pool_withdraw'
+  | 'invoice_disputed'
+  | 'invoice_resolved';
 
 interface HistoryEvent {
   id: string;
@@ -46,6 +48,8 @@ const KIND_LABELS: Record<EventKind, string> = {
   pool_funded: 'Pool Funded Invoice',
   pool_repaid: 'Repayment Received',
   pool_withdraw: 'Pool Withdrawal',
+  invoice_disputed: 'Dispute Filed',
+  invoice_resolved: 'Dispute Resolved',
 };
 
 const KIND_COLORS: Record<EventKind, string> = {
@@ -57,6 +61,8 @@ const KIND_COLORS: Record<EventKind, string> = {
   pool_funded: 'text-brand-gold bg-brand-gold/10 border-brand-gold/20',
   pool_repaid: 'text-green-400 bg-green-400/10 border-green-400/20',
   pool_withdraw: 'text-orange-400 bg-orange-400/10 border-orange-400/20',
+  invoice_disputed: 'text-red-400 bg-red-400/10 border-red-400/20',
+  invoice_resolved: 'text-blue-400 bg-blue-400/10 border-blue-400/20',
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -119,6 +125,14 @@ function parseEvents(rawEvents: any[], walletAddress: string): HistoryEvent[] {
         } else if (action === 'default') {
           invoiceId = BigInt(val as bigint);
           kind = 'invoice_defaulted';
+          relevant = ownedInvoiceIds.has(invoiceId);
+        } else if (action === 'disputed') {
+          invoiceId = BigInt(val as bigint);
+          kind = 'invoice_disputed';
+          relevant = ownedInvoiceIds.has(invoiceId);
+        } else if (action === 'resolved') {
+          invoiceId = BigInt(val as bigint);
+          kind = 'invoice_resolved';
           relevant = ownedInvoiceIds.has(invoiceId);
         }
       } else if (ns === 'POOL' && contract === POOL_CONTRACT_ID) {
@@ -225,7 +239,7 @@ export default function HistoryPage() {
         });
 
         const raw = response.events ?? [];
-        const parsed = parseEvents(raw, wallet.address);
+        const parsed = parseEvents(raw as any[], wallet.address);
 
         if (append) {
           setEvents((prev) => [...prev, ...parsed]);

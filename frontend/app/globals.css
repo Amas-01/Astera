@@ -61,6 +61,3 @@ body {
 .badge-defaulted {
   @apply bg-red-900/40 text-red-400 border border-red-800/50;
 }
-.badge-disputed {
-  @apply bg-yellow-900/40 text-yellow-400 border border-yellow-800/50;
-}

@@ -18,8 +18,16 @@ export const HORIZON_URL = 'https://horizon-testnet.stellar.org';
 export const INVOICE_CONTRACT_ID = process.env.NEXT_PUBLIC_INVOICE_CONTRACT_ID ?? '';
 export const POOL_CONTRACT_ID = process.env.NEXT_PUBLIC_POOL_CONTRACT_ID ?? '';
 export const USDC_TOKEN_ID = process.env.NEXT_PUBLIC_USDC_TOKEN_ID ?? '';
+export const EURC_TOKEN_ID = process.env.NEXT_PUBLIC_EURC_TOKEN_ID ?? '';
 
 export const rpc = new StellarRpc.Server(RPC_URL);
+
+/** Human label for a pool stablecoin (matches env-known tokens). */
+export function stablecoinLabel(tokenId: string): string {
+  if (tokenId === USDC_TOKEN_ID) return 'USDC';
+  if (tokenId === EURC_TOKEN_ID) return 'EURC';
+  return truncateAddress(tokenId);
+}
 
 /** Convert USDC amount (human) to stroops (7 decimals) */
 export function toStroops(amount: number): bigint {

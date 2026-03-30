@@ -69,12 +69,12 @@
                         "key": {
                           "vec": [
                             {
-                              "symbol": "InvoiceCount"
+                              "symbol": "InvoiceContract"
                             }
                           ]
                         },
                         "val": {
-                          "u64": 0
+                          "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
                         }
                       },
                       {
@@ -93,49 +93,24 @@
                         "key": {
                           "vec": [
                             {
-                              "symbol": "Pool"
+                              "symbol": "PoolContract"
                             }
                           ]
                         },
                         "val": {
-                          "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHK3M"
+                          "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAITA4"
                         }
                       },
                       {
                         "key": {
                           "vec": [
                             {
-                              "symbol": "StorageStats"
+                              "symbol": "ScoreVersion"
                             }
                           ]
                         },
                         "val": {
-                          "map": [
-                            {
-                              "key": {
-                                "symbol": "active_invoices"
-                              },
-                              "val": {
-                                "u64": 0
-                              }
-                            },
-                            {
-                              "key": {
-                                "symbol": "cleaned_invoices"
-                              },
-                              "val": {
-                                "u64": 0
-                              }
-                            },
-                            {
-                              "key": {
-                                "symbol": "total_invoices"
-                              },
-                              "val": {
-                                "u64": 0
-                              }
-                            }
-                          ]
+                          "u32": 1
                         }
                       }
                     ]
@@ -145,7 +120,7 @@
             },
             "ext": "v0"
           },
-          518400
+          4095
         ]
       ],
       [
@@ -166,7 +141,7 @@
             },
             "ext": "v0"
           },
-          518400
+          4095
         ]
       ]
     ]

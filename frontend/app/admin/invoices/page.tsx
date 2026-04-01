@@ -2,80 +2,45 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useStore } from '@/lib/store';
-import { getInvoice, getInvoiceCount, buildInitCoFundingTx, submitTx } from '@/lib/contracts';
+import {
+  getInvoice,
+  getInvoiceCount,
+  getPoolConfig,
+  buildInitCoFundingTx,
+  submitTx,
+} from '@/lib/contracts';
 import { formatUSDC, truncateAddress, formatDate } from '@/lib/stellar';
 import type { Invoice } from '@/lib/types';
-
-/** Number of invoices to scan per batch */
-const PAGE_SIZE = 20;
 
 export default function AdminInvoicesPage() {
   const { wallet } = useStore();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [actionLoading, setActionLoading] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [totalCount, setTotalCount] = useState(0);
-  const [scannedCount, setScannedCount] = useState(0);
-
-  const hasMore = scannedCount < totalCount;
-
-  const fetchBatch = useCallback(async (startId: number, batchSize: number) => {
-    const endId = Math.max(1, startId - batchSize + 1);
-    const ids = Array.from({ length: startId - endId + 1 }, (_, i) => startId - i);
-
-    const fetched = await Promise.all(
-      ids.map(async (id) => {
-        const inv = await getInvoice(id);
-        return inv;
-      }),
-    );
-
-    return fetched.filter((inv) => inv.status === 'Pending');
-  }, []);
 
   const loadInvoices = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const count = await getInvoiceCount();
-      setTotalCount(count);
-
-      if (count === 0) {
-        setInvoices([]);
-        setScannedCount(0);
-        return;
+      const all: Invoice[] = [];
+      for (let i = 1; i <= count; i++) {
+        const inv = await getInvoice(i);
+        // Only show pending invoices for this section
+        if (inv.status === 'Pending') {
+          all.push(inv);
+        }
       }
-
-      const pending = await fetchBatch(count, PAGE_SIZE);
-      setInvoices(pending);
-      setScannedCount(Math.min(PAGE_SIZE, count));
+      setInvoices(all);
     } catch (e) {
       setError('Failed to load pending invoices.');
       console.error(e);
     } finally {
       setLoading(false);
     }
-  }, [fetchBatch]);
-
-  const loadMore = useCallback(async () => {
-    if (loadingMore || !hasMore) return;
-    setLoadingMore(true);
-    try {
-      const nextStartId = totalCount - scannedCount;
-      if (nextStartId < 1) return;
-
-      const pending = await fetchBatch(nextStartId, PAGE_SIZE);
-      setInvoices((prev) => [...prev, ...pending]);
-      setScannedCount((prev) => Math.min(prev + PAGE_SIZE, totalCount));
-    } catch (e) {
-      console.error('Failed to load more invoices:', e);
-    } finally {
-      setLoadingMore(false);
-    }
-  }, [loadingMore, hasMore, totalCount, scannedCount, fetchBatch]);
+  }, []);
 
   useEffect(() => {
     loadInvoices();
@@ -98,12 +63,14 @@ export default function AdminInvoicesPage() {
     setSuccess(null);
 
     try {
+      const config = await getPoolConfig();
       const xdr = await buildInitCoFundingTx({
         admin: wallet.address,
         invoiceId: invoice.id,
         principal: invoice.amount,
         sme: invoice.owner,
         dueDate: invoice.dueDate,
+        token: config.usdcToken,
       });
 
       const freighter = await import('@stellar/freighter-api');
@@ -229,29 +196,6 @@ export default function AdminInvoicesPage() {
           </table>
         </div>
       </div>
-
-      {/* Load More */}
-      {hasMore && (
-        <div className="text-center">
-          <button
-            onClick={loadMore}
-            disabled={loadingMore}
-            className="px-6 py-2.5 bg-brand-card border border-brand-border rounded-xl text-sm font-medium text-white hover:border-brand-gold/50 transition-colors disabled:opacity-50"
-          >
-            {loadingMore ? (
-              <span className="flex items-center justify-center gap-2">
-                <span className="w-4 h-4 border-2 border-brand-gold border-t-transparent rounded-full animate-spin" />
-                Loading more...
-              </span>
-            ) : (
-              'Load more invoices'
-            )}
-          </button>
-          <p className="text-xs text-brand-muted mt-2">
-            Scanned {scannedCount} of {totalCount} on-chain invoices
-          </p>
-        </div>
-      )}
     </div>
   );
 }

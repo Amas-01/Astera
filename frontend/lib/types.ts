@@ -1,4 +1,16 @@
-export type InvoiceStatus = 'Pending' | 'Funded' | 'Paid' | 'Defaulted';
+export type InvoiceStatus = 'Pending' | 'Funded' | 'Paid' | 'Defaulted' | 'Disputed';
+
+export type DisputeResolution = 'Upheld' | 'Rejected';
+
+export interface DisputeRecord {
+  invoiceId: number;
+  reason: string;
+  filedAt: number;
+  disputedAtLedger: number;
+  resolvedAt: number;
+  resolvedAtLedger: number | null;
+  resolution: DisputeResolution | null;
+}
 
 /** On-chain view from `get_metadata` (SEP-oriented display fields). */
 export interface InvoiceMetadata {
@@ -24,6 +36,7 @@ export interface Invoice {
   createdAt: number;
   fundedAt: number;
   paidAt: number;
+  defaultedAt: number;
   poolContract: string;
 }
 
@@ -39,15 +52,16 @@ export interface PoolConfig {
   invoiceContract: string;
   admin: string;
   yieldBps: number;
-  factoringFeeBps: number;
-  compoundInterest: boolean;
+  totalDeposited: bigint;
+  totalDeployed: bigint;
+  totalPaidOut: bigint;
+  usdcToken: string;
 }
 
 export interface PoolTokenTotals {
   totalDeposited: bigint;
   totalDeployed: bigint;
   totalPaidOut: bigint;
-  totalFeeRevenue: bigint;
 }
 
 export interface FundedInvoice {
@@ -58,7 +72,6 @@ export interface FundedInvoice {
   principal: bigint;
   committed: bigint;
   fundedAt: number;
-  factoringFee: bigint;
   dueDate: number;
   repaid: boolean;
 }

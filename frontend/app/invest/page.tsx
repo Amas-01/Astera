@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '@/lib/store';
 import PoolStats from '@/components/PoolStats';
-import { APYCalculator } from '@/components/APYCalculator';
 import {
   getPoolConfig,
   getInvestorPosition,
@@ -34,15 +33,14 @@ export default function InvestPage() {
   }, []);
 
   useEffect(() => {
-    if (!selectedToken) return;
-    loadTokenTotals(selectedToken);
-  }, [selectedToken, poolConfig]);
+    loadTokenTotals();
+  }, [poolConfig]);
 
   useEffect(() => {
-    if (wallet.connected && wallet.address && selectedToken) {
-      loadPosition(wallet.address, selectedToken);
+    if (wallet.connected && wallet.address) {
+      loadPosition(wallet.address);
     }
-  }, [wallet.address, wallet.connected, selectedToken]);
+  }, [wallet.address, wallet.connected]);
 
   function pickDefaultToken(tokens: string[]): string {
     if (tokens.length === 0) return '';
@@ -67,26 +65,23 @@ export default function InvestPage() {
     }
   }
 
-  async function loadTokenTotals(token: string) {
-    if (!POOL_CONFIGURED) return;
+  async function loadTokenTotals() {
     try {
-      const tt = await getPoolTokenTotals(token);
+      const tt = await getPoolTokenTotals();
       setTokenTotals(tt);
     } catch {
       setTokenTotals(null);
     }
   }
 
-  async function loadPosition(addr: string, token: string) {
+  async function loadPosition(addr: string) {
     try {
-      const pos = await getInvestorPosition(addr, token);
+      const pos = await getInvestorPosition(addr);
       setPosition(pos);
     } catch (e) {
       console.error(e);
     }
   }
-
-  const POOL_CONFIGURED = Boolean(process.env.NEXT_PUBLIC_POOL_CONTRACT_ID);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -101,8 +96,8 @@ export default function InvestPage() {
 
       const xdr =
         mode === 'deposit'
-          ? await buildDepositTx(wallet.address, selectedToken, stroops)
-          : await buildWithdrawTx(wallet.address, selectedToken, stroops);
+          ? await buildDepositTx(wallet.address, stroops)
+          : await buildWithdrawTx(wallet.address, stroops);
 
       const freighter = await import('@stellar/freighter-api');
       const { signedTxXdr, error: signError } = await freighter.signTransaction(xdr, {
@@ -118,8 +113,8 @@ export default function InvestPage() {
       );
       setAmount('');
       await loadPool();
-      await loadTokenTotals(selectedToken);
-      await loadPosition(wallet.address, selectedToken);
+      await loadTokenTotals();
+      await loadPosition(wallet.address);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Transaction failed.';
       setError(msg);
@@ -280,7 +275,7 @@ export default function InvestPage() {
                 </form>
 
                 <div className="mt-6 p-4 bg-brand-dark border border-brand-border rounded-xl text-xs text-brand-muted space-y-1">
-                  <p>• Choose a whitelisted stablecoin; deposits and withdrawals use that token.</p>
+                  <p>• Only the whitelisted stablecoin (USDC) is currently supported.</p>
                   <p>
                     • Invoice funding and repayment use the same token registered for that invoice.
                   </p>

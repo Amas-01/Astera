@@ -20,43 +20,22 @@ frontend/    — Next.js 14 app (Freighter wallet, Stellar SDK)
 ## Contracts
 
 ### Invoice Contract
-
 - `create_invoice` — SME mints an invoice token with amount, debtor, due date
 - `mark_funded` — Called by pool when invoice is funded
 - `mark_paid` — SME or pool marks invoice as repaid
 - `mark_defaulted` — Pool flags missed repayment
 
 ### Pool Contract
-
-- `initialize` — Sets admin, first accepted stablecoin (`initial_token`), and invoice contract
-- `add_token` / `remove_token` — Admin maintains a whitelist of accepted stablecoin SAC addresses
-- `deposit` — Investor deposits a whitelisted stablecoin into the pool (positions are per token)
-- `init_co_funding` — Admin opens an invoice for co-funding in a specific stablecoin
-- `commit_to_invoice` — Investors commit **available balance in that invoice’s token** until the principal target is met
-- `repay_invoice` — SME repays principal + simple interest (8% APY default) **in the same token the invoice was funded with**
-- `withdraw` — Investor withdraws available (undeployed) balance **in the chosen token**
+- `deposit` — Investor deposits USDC into the liquidity pool
+- `fund_invoice` — Admin deploys pool liquidity to fund a specific invoice
+- `repay_invoice` — SME repays principal + simple interest (8% APY default)
+- `withdraw` — Investor withdraws available (undeployed) balance
 
 ---
 
 ## Setup
 
-### Rapid Local Development (Docker Compose)
-We provide a one-command setup using Docker Compose that spins up the Stellar local network, the Next.js frontend, a contracts development environment, and mock services.
-
-```bash
-docker-compose up -d
-```
-After running this command:
-- **Frontend** is available at http://localhost:3000
-- **Stellar RPC** is available at http://localhost:8000
-- **Mock Services** are available at http://localhost:4000
-
----
-
-### Manual Setup
-
 ### Prerequisites
-
 - [Rust + Cargo](https://rustup.rs/)
 - [Stellar CLI](https://developers.stellar.org/docs/tools/developer-tools/stellar-cli)
 - [Node.js 20+](https://nodejs.org/)
@@ -130,7 +109,6 @@ Open [http://localhost:3000](http://localhost:3000).
 ## User Flows
 
 ### SME Flow
-
 1. Connect Freighter wallet
 2. Go to **New Invoice** — fill debtor, amount, due date
 3. Sign transaction — invoice minted on Stellar
@@ -138,9 +116,8 @@ Open [http://localhost:3000](http://localhost:3000).
 5. When customer pays, call `repay_invoice` to settle
 
 ### Investor Flow
-
 1. Connect Freighter wallet
-2. Go to **Invest** — choose a whitelisted stablecoin and deposit into the pool
+2. Go to **Invest** — deposit USDC into pool
 3. Pool admin deploys liquidity to approved invoices
 4. When invoices are repaid, yield accumulates in the pool
 5. Withdraw available balance anytime
@@ -163,36 +140,8 @@ stellar contract invoke \
 
 ---
 
-## Deployment
+## Network
 
-### Testnet Deployment
-
-For development and testing, see the [Testnet Deployment Guide](docs/deployment.md) for step-by-step instructions.
-
-### Mainnet Deployment
-
-For production deployment, see the comprehensive [Mainnet Deployment Guide](docs/mainnet-deployment.md) which includes:
-
-- Pre-deployment security checklist
-- Contract verification procedures
-- Monitoring and alerting setup
-- Rollback and emergency procedures
-- Post-deployment verification steps
-
-**⚠️ Important:** Mainnet deployment involves real assets. Complete all security audits and testing before deploying to production.
-
----
-
-## Network Information
-
-### Testnet
-
+- **Network:** Stellar Testnet
 - **RPC:** https://soroban-testnet.stellar.org
-- **Horizon:** https://horizon-testnet.stellar.org
 - **Explorer:** https://stellar.expert/explorer/testnet
-
-### Mainnet
-
-- **RPC:** https://soroban-mainnet.stellar.org
-- **Horizon:** https://horizon.stellar.org
-- **Explorer:** https://stellar.expert/explorer/public
